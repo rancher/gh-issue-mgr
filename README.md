@@ -6,3 +6,4 @@
 - octokit/request-action@v2.x
 - endbug/project-fields@v2
 - titoportas/update-project-fields@v0.1.0
+- kentaro-m/auto-assign-action@v1.2.5 
