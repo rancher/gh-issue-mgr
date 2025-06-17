@@ -18,6 +18,13 @@ async function run() {
         const query = `query($cursor: String, $org: String!, $userLogins: [String!], $username: String!)  {
             user(login: $username) {
                 id
+                organizations(first: 100) {
+                    nodes {
+                        login
+                        name
+                        description
+                    }
+                }
             }
             organization(login: $org) {
               teams (first:1, userLogins: $userLogins, after: $cursor) { 
@@ -55,8 +62,13 @@ async function run() {
         } while (data.organization.teams.pageInfo.hasNextPage)
 
         const isTeamMember = teams.some((teamName) => inputTeams.includes(teamName.toLowerCase()))
-
+        
+        // Check if user is a member of the specified organization
+        const isOrganization = data.user && data.user.organizations && 
+            data.user.organizations.nodes.some((org) => org.login.toLowerCase() === organization.toLowerCase())
+        
         setOutput("teams", teams)
+        setOutput("isOrganization", isOrganization)
         setOutput("isTeamMember", isTeamMember)
 
     } catch (error) {
