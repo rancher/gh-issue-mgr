@@ -42,15 +42,17 @@ echo "Pushing changings from tmp_upstream to origin"
 git push origin "refs/remotes/tmp_upstream/${BRANCH_MAPPING%%:*}:refs/heads/${BRANCH_MAPPING#*:}" --force
 
 if [[ "$SYNC_TAGS" = true ]]; then
-  echo "Force syncing all tags"
-  git tag -d $(git tag -l) > /dev/null
+  echo "Syncing all tags (without deleting local tags)"
+  # Fetch all tags from the upstream repository, without deleting local tags
   git fetch tmp_upstream --tags --quiet
-  git push origin --tags --force
+  # Push all local tags to the origin repository (without --force)
+  git push origin --tags
 elif [[ -n "$SYNC_TAGS" ]]; then
-  echo "Force syncing tags matching pattern: $SYNC_TAGS"
-  git tag -d $(git tag -l) > /dev/null
+  echo "Syncing tags matching pattern: $SYNC_TAGS (without deleting local tags)"
+  # Fetch all tags from the upstream repository, without deleting local tags
   git fetch tmp_upstream --tags --quiet
-  git tag | grep "$SYNC_TAGS" | xargs --no-run-if-empty git push origin --force
+  # Filter tags matching the pattern and push them to the origin repository
+  git tag | grep "$SYNC_TAGS" | xargs --no-run-if-empty git push origin
 fi
 
 echo "Removing tmp_upstream"
