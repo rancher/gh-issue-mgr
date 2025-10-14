@@ -15,6 +15,9 @@ if [[ -z "$BRANCH_MAPPING" ]]; then
   exit 1
 fi
 
+SOURCE_BRANCH=${BRANCH_MAPPING%%:*}
+DEST_BRANCH=${BRANCH_MAPPING#*:}
+
 if ! echo $UPSTREAM_REPO | grep -Eq ':|@|\.git\/?$'
 then
   echo "UPSTREAM_REPO does not seem to be a valid git URI, assuming it's a GitHub repo"
@@ -24,7 +27,8 @@ then
 fi
 
 echo "UPSTREAM_REPO=$UPSTREAM_REPO"
-echo "BRANCHES=$BRANCH_MAPPING"
+echo "SOURCE_BRANCH=$SOURCE_BRANCH"
+echo "DEST_BRANCH=$DEST_BRANCH"
 
 git config --unset-all http."https://github.com/".extraheader || :
 
@@ -34,13 +38,34 @@ git remote set-url origin "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHU
 echo "Adding tmp_upstream $UPSTREAM_REPO"
 git remote add tmp_upstream "$UPSTREAM_REPO"
 
-echo "Fetching tmp_upstream"
+echo "Fetching branches"
 git fetch tmp_upstream --quiet
-git remote --verbose
+git fetch origin --quiet
 
-echo "Pushing changings from tmp_upstream to origin"
-git push origin "refs/remotes/tmp_upstream/${BRANCH_MAPPING%%:*}:refs/heads/${BRANCH_MAPPING#*:}" --force
+# Ensure destination branch exists  
+if ! git show-ref --verify --quiet "refs/heads/$DEST_BRANCH"; then
+  echo "Destination branch does not exist locally, creating it from origin"
+  git checkout -b "$DEST_BRANCH" "origin/$DEST_BRANCH" || git checkout -b "$DEST_BRANCH"
+else
+  git checkout "$DEST_BRANCH"
+  git pull origin "$DEST_BRANCH" --rebase
+fi
 
+# Compare upstream source branch with local destination branch
+UPSTREAM_HASH=$(git rev-parse "tmp_upstream/$SOURCE_BRANCH")
+LOCAL_HASH=$(git rev-parse "HEAD")
+
+if [ "$UPSTREAM_HASH" != "$LOCAL_HASH" ]; then
+  echo "Branches differ, rebasing $DEST_BRANCH on tmp_upstream/$SOURCE_BRANCH"
+  git rebase "tmp_upstream/$SOURCE_BRANCH"
+else
+  echo "Branches are already in sync."
+fi
+
+echo "Pushing to origin/$DEST_BRANCH"
+git push origin "$DEST_BRANCH"
+
+# Optional: Sync tags
 if [[ "$SYNC_TAGS" = true ]]; then
   echo "Syncing all tags (without deleting local tags)"
   # Fetch all tags from the upstream repository, without deleting local tags
