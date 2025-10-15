@@ -2,15 +2,15 @@
 set -e
 
 # ----------------------------
-# Config Git safe directory for CI
+# Configure Git safe directory for CI (GitHub Actions)
 # ----------------------------
 git config --global --add safe.directory /github/workspace
 
 # ----------------------------
 # Input arguments
 # ----------------------------
-UPSTREAM_REPO=$1
-BRANCH_MAPPING=$2
+UPSTREAM_REPO=$1        # The upstream repository URL or GitHub "owner/repo" shorthand
+BRANCH_MAPPING=$2       # Format: SOURCE_BRANCH:DEST_BRANCH
 
 if [ -z "$UPSTREAM_REPO" ]; then
   echo "Missing \$UPSTREAM_REPO"
@@ -22,14 +22,14 @@ if [ -z "$BRANCH_MAPPING" ]; then
   exit 1
 fi
 
-SOURCE_BRANCH=${BRANCH_MAPPING%%:*}
-DEST_BRANCH=${BRANCH_MAPPING#*:}
+SOURCE_BRANCH=${BRANCH_MAPPING%%:*}  # Extract source branch
+DEST_BRANCH=${BRANCH_MAPPING#*:}     # Extract destination branch
 
 # ----------------------------
 # Normalize upstream URL
 # ----------------------------
 if ! echo "$UPSTREAM_REPO" | grep -Eq ':|@|\.git\/?$'; then
-  echo "Assuming GitHub repo"
+  echo "Assuming GitHub repo shorthand"
   UPSTREAM_REPO="https://github.com/${UPSTREAM_REPO}.git"
 fi
 
@@ -38,66 +38,97 @@ echo "SOURCE_BRANCH=$SOURCE_BRANCH"
 echo "DEST_BRANCH=$DEST_BRANCH"
 
 # ----------------------------
-# Reset origin
+# Reset origin remote to use GitHub token
 # ----------------------------
 git config --unset-all http."https://github.com/".extraheader || :
 git remote set-url origin "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY"
 
 # ----------------------------
-# Add temporary upstream
+# Add temporary upstream remote
 # ----------------------------
 git remote add tmp_upstream "$UPSTREAM_REPO"
 git fetch tmp_upstream --quiet
 git fetch origin --quiet
+git remote --verbose
 
 # ----------------------------
-# Checkout or create DEST_BRANCH
+# Check if the source branch is a wildcard
 # ----------------------------
-if git show-ref --verify --quiet "refs/heads/$DEST_BRANCH"; then
-  git checkout "$DEST_BRANCH"
-else
-  if git ls-remote --heads origin "$DEST_BRANCH" | grep -q "$DEST_BRANCH"; then
-    git checkout -b "$DEST_BRANCH" "origin/$DEST_BRANCH"
-  else
-    git checkout -b "$DEST_BRANCH"
+if echo "$SOURCE_BRANCH" | grep -q "\*"; then
+  echo "Wildcard branch detected: $SOURCE_BRANCH"
+  
+  # Find all branches in tmp_upstream matching the pattern
+  matching_branches=$(git for-each-ref --format='%(refname:short)' refs/remotes/tmp_upstream/ | grep -E "$SOURCE_BRANCH")
+  
+  if [ -z "$matching_branches" ]; then
+    echo "No upstream branches match pattern $SOURCE_BRANCH"
+    exit 1
   fi
-fi
 
-git pull --rebase origin "$DEST_BRANCH" || echo "No upstream changes"
+  # Push each matching branch to origin
+  for upstream_branch in $matching_branches; do
+    branch_name="${upstream_branch##*/}"  # Remove refs/remotes/tmp_upstream/ prefix
+    
+    if [ "$DEST_BRANCH" = "$SOURCE_BRANCH" ]; then
+      target_branch="$branch_name"
+    else
+      target_branch="$DEST_BRANCH"
+    fi
 
-# ----------------------------
-# Rebase if needed
-# ----------------------------
-UPSTREAM_HASH=$(git rev-parse "tmp_upstream/$SOURCE_BRANCH")
-LOCAL_HASH=$(git rev-parse "HEAD")
+    echo "Pushing tmp_upstream/$upstream_branch -> origin/$target_branch"
+    git push origin "refs/remotes/tmp_upstream/$upstream_branch:refs/heads/$target_branch" --force
+  done
 
-if [ "$UPSTREAM_HASH" != "$LOCAL_HASH" ]; then
-  echo "Branches differ, rebasing $DEST_BRANCH on tmp_upstream/$SOURCE_BRANCH"
-  git rebase "tmp_upstream/$SOURCE_BRANCH"
 else
-  echo "Branches are already in sync."
-fi
+  # ----------------------------
+  # Single branch sync
+  # ----------------------------
+  echo "Single branch sync: $SOURCE_BRANCH -> $DEST_BRANCH"
 
-# ----------------------------
-# Push branch to origin
-# ----------------------------
-git push --set-upstream origin "$DEST_BRANCH"
+  # Checkout or create the destination branch locally
+  if git show-ref --verify --quiet "refs/heads/$DEST_BRANCH"; then
+    git checkout "$DEST_BRANCH"
+  else
+    if git ls-remote --heads origin "$DEST_BRANCH" | grep -q "$DEST_BRANCH"; then
+      git checkout -b "$DEST_BRANCH" "origin/$DEST_BRANCH"
+    else
+      git checkout -b "$DEST_BRANCH"
+    fi
+  fi
+
+  # Pull latest changes from origin (rebase)
+  git pull --rebase origin "$DEST_BRANCH" || echo "No upstream changes"
+
+  # Compare local branch with tmp_upstream branch
+  UPSTREAM_HASH=$(git rev-parse "tmp_upstream/$SOURCE_BRANCH")
+  LOCAL_HASH=$(git rev-parse "HEAD")
+
+  if [ "$UPSTREAM_HASH" != "$LOCAL_HASH" ]; then
+    echo "Branches differ, rebasing $DEST_BRANCH on tmp_upstream/$SOURCE_BRANCH"
+    git rebase "tmp_upstream/$SOURCE_BRANCH"
+  else
+    echo "Branches are already in sync."
+  fi
+
+  # Push the local branch to origin
+  git push --set-upstream origin "$DEST_BRANCH"
+fi
 
 # ----------------------------
 # Optional: Sync tags
 # ----------------------------
+git fetch tmp_upstream --tags --quiet
+
 if [ "$SYNC_TAGS" = "true" ]; then
-  echo "Syncing all tags (without deleting local tags)"
-  git fetch tmp_upstream --tags --quiet
-  git push origin --tags
+  echo "Force syncing all tags"
+  git push origin --tags --force
 elif [ -n "$SYNC_TAGS" ]; then
-  echo "Syncing tags matching pattern: $SYNC_TAGS"
-  git fetch tmp_upstream --tags --quiet
-  git tag | grep -E "$SYNC_TAGS" | xargs -r git push origin
+  echo "Force syncing tags matching pattern: $SYNC_TAGS"
+  git tag | grep -E "$SYNC_TAGS" | xargs -r git push origin --force
 fi
 
 # ----------------------------
-# Cleanup
+# Cleanup temporary upstream remote
 # ----------------------------
 git remote rm tmp_upstream
 git remote --verbose
