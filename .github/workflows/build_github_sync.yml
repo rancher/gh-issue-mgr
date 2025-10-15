@@ -30,6 +30,6 @@ jobs:
           context: .
           file: github-sync/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          tags: ghcr.io/rancher/github-sync:latest
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
