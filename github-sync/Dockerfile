@@ -13,6 +13,6 @@ LABEL \
 RUN apk add --no-cache git openssh-client && \
   echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
 
-ADD *.sh /
+ADD github-sync/*.sh /
 
 ENTRYPOINT ["/entrypoint.sh"]
