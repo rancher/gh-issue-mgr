@@ -41,7 +41,7 @@ echo "DEST_BRANCH=$DEST_BRANCH"
 # Reset origin
 # ----------------------------
 git config --unset-all http."https://github.com/".extraheader || :
-git remote set-url origin "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY" --quiet
+git remote set-url origin "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY"
 
 # ----------------------------
 # Add temporary upstream
