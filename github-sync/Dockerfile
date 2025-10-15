@@ -10,7 +10,7 @@ LABEL \
   org.opencontainers.image.authors="Wei He <github@weispot.com>" \
   maintainer="Wei He <github@weispot.com>"
 
-RUN apk add --no-cache git openssh-client && \
+RUN apk add --no-cache git openssh-client bash && \
   echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
 
 ADD github-sync/*.sh /
