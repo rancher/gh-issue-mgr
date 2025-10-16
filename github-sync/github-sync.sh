@@ -36,6 +36,10 @@ git config --unset-all http."https://github.com/".extraheader || :
 echo "Resetting origin to: https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY"
 git remote set-url origin "https://$GITHUB_ACTOR:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY"
 
+# Fetch origin to ensure local refs are up-to-date (once)
+echo "Fetching origin branches"
+git fetch origin --prune --quiet
+
 # ----------------------------
 # Add temporary upstream
 # ----------------------------
@@ -55,37 +59,61 @@ sync_branch() {
   echo "Syncing: $SOURCE_BRANCH -> $DEST_BRANCH"
   echo "----------------------------------------"
   
-  # Check if destination branch exists locally or remotely
-  if git show-ref --verify --quiet "refs/heads/$DEST_BRANCH" || git ls-remote --heads origin "$DEST_BRANCH" | grep -q "$DEST_BRANCH"; then
-    echo "Branch $DEST_BRANCH exists, using checkout and rebase"
+  # Clean up any leftover rebase state
+  if [[ -d ".git/rebase-merge" ]] || [[ -d ".git/rebase-apply" ]]; then
+    echo "Cleaning up leftover rebase state..."
+    git rebase --abort 2>/dev/null || true
+    rm -fr .git/rebase-merge .git/rebase-apply 2>/dev/null || true
+  fi
+  
+  # Check if destination branch exists on origin (remote)
+  if git ls-remote --heads origin "$DEST_BRANCH" | grep -q "$DEST_BRANCH"; then
+    echo "Branch $DEST_BRANCH exists on origin, using checkout and rebase"
 
-    # Checkout branch (create locally if only exists on origin)
-    if git show-ref --verify --quiet "refs/heads/$DEST_BRANCH"; then
-      git checkout "$DEST_BRANCH"
-    else
-      git checkout -b "$DEST_BRANCH" "origin/$DEST_BRANCH"
+    # Specific fetch for this branch to ensure ref exists
+    git fetch origin "$DEST_BRANCH" --quiet
+    
+    # Ensure we're not on the target branch
+    CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+    if [[ "$CURRENT_BRANCH" == "$DEST_BRANCH" ]]; then
+      git checkout --detach HEAD
     fi
-
-    # Pull latest from origin
-    git pull --rebase origin "$DEST_BRANCH" || echo "No upstream changes"
+    
+    # Delete local branch if it exists (to ensure clean state)
+    if git show-ref --verify --quiet "refs/heads/$DEST_BRANCH"; then
+      git branch -D "$DEST_BRANCH" 2>/dev/null || true
+    fi
+    
+    # Create fresh local branch from origin
+    git checkout -b "$DEST_BRANCH" "origin/$DEST_BRANCH"
     
     # Fetch source branch from upstream
     git fetch tmp_upstream "$SOURCE_BRANCH:tmp_sync_$SOURCE_BRANCH" --quiet
     
     # Rebase on tmp_sync_SOURCE_BRANCH with error handling
     if ! git rebase "tmp_sync_$SOURCE_BRANCH"; then
-      echo "❌ Rebase failed for $DEST_BRANCH, aborting..."
-      git rebase --abort
+      echo "❌ Rebase failed for $DEST_BRANCH with conflicts"
+      echo "Conflict details:"
+      git status --short || echo "No status available"
+      echo ""
+      echo "Aborting rebase and cleaning up..."
+      git rebase --abort 2>/dev/null || true
+      rm -fr .git/rebase-merge .git/rebase-apply 2>/dev/null || true
+      
       # Clean up temp branch
       git branch -D "tmp_sync_$SOURCE_BRANCH" 2>/dev/null || true
+      
+      # Return to detached state to avoid leaving repo in bad state
+      git checkout --detach HEAD 2>/dev/null || true
+      
       return 1
     fi
 
     # Clean up temp branch
     git branch -D "tmp_sync_$SOURCE_BRANCH" 2>/dev/null || true
 
-    # Push changes to origin
-    git push origin "$DEST_BRANCH"
+    # Push changes to origin with force-with-lease for safety
+    git push origin "$DEST_BRANCH" --force-with-lease
     echo "✓ Successfully synced $DEST_BRANCH with rebase"
   else
     # Branch does not exist -> use direct push method
@@ -129,10 +157,9 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
     if [[ "$SOURCE_PATTERN" == "$DEST_PATTERN" ]]; then
       DEST_BRANCH="$SOURCE_BRANCH"
     else
-      # Simple replacement for pattern mapping
-      # For v* -> v*, keep the same name
-      # For feature-* -> prod-*, replace prefix
+      # Pattern replacement logic
       if [[ "$SOURCE_PATTERN" == *"*" && "$DEST_PATTERN" == *"*" ]]; then
+        # Both patterns have wildcards - extract and reconstruct
         PREFIX_SOURCE=${SOURCE_PATTERN%\**}
         PREFIX_DEST=${DEST_PATTERN%\**}
         SUFFIX_SOURCE=${SOURCE_PATTERN#*\*}
@@ -144,6 +171,7 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
         
         DEST_BRANCH="${PREFIX_DEST}${WILDCARD_PART}${SUFFIX_DEST}"
       else
+        # Simple string replacement (fallback for non-wildcard patterns)
         DEST_BRANCH="${SOURCE_BRANCH/$SOURCE_PATTERN/$DEST_PATTERN}"
       fi
     fi
@@ -190,18 +218,9 @@ git fetch tmp_upstream --tags --quiet
 
 if [[ "$SYNC_TAGS" = true ]]; then
   echo "Force syncing all tags"
-  # Only delete tags if they exist
-  if [[ -n "$(git tag -l)" ]]; then
-    git tag -d $(git tag -l) > /dev/null 2>&1 || true
-  fi
   git push origin --tags --force
 elif [[ -n "$SYNC_TAGS" ]]; then
   echo "Force syncing tags matching pattern: $SYNC_TAGS"
-  # Only delete tags if they exist
-  if [[ -n "$(git tag -l)" ]]; then
-    git tag -d $(git tag -l) > /dev/null 2>&1 || true
-  fi
-  # Filter and push matching tags
   MATCHING_TAGS=$(git tag | grep "$SYNC_TAGS" || true)
   if [[ -n "$MATCHING_TAGS" ]]; then
     echo "$MATCHING_TAGS" | xargs -r git push origin --force
