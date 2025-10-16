@@ -177,7 +177,7 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
     fi
     
     if sync_branch "$SOURCE_BRANCH" "$DEST_BRANCH"; then
-      ((SUCCESS_COUNT++))
+      SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     else
       FAILED_BRANCHES+=("$SOURCE_BRANCH -> $DEST_BRANCH")
     fi
