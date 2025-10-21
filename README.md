@@ -11,3 +11,4 @@ A collection of GitHub Actions to help manage GitHub issues and projects efficie
 - titoportas/update-project-fields@v0.1.0
 - kentaro-m/auto-assign-action@v1.2.5 
 - repo-sync/github-sync@v2
+- JasonEtco/create-an-issue@v2
