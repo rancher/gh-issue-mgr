@@ -41332,6 +41332,7 @@ exports.frontmatterSchema = zod_1.z
     milestone: zod_1.z.union([zod_1.z.string(), zod_1.z.number()]).optional(),
     name: zod_1.z.string().optional(),
     about: zod_1.z.string().optional(),
+    type: zod_1.z.string().optional(),
 })
     .strict();
 function setOutputs(tools, issue) {
