@@ -233,7 +233,7 @@ if [[ $? -ne 0 ]]; then
   exit 1
 fi
 
-if [[ "$SYNC_TAGS" = true ]]; then
+if [[ "$SYNC_TAGS" == "true" ]]; then
   echo "Force syncing all tags"
   if git push origin --tags --force; then
     echo "✓ Tags push successful"
