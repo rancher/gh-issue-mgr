@@ -227,7 +227,7 @@ fi
 # ----------------------------
 echo "Syncing tags if specified: SYNC_TAGS=$SYNC_TAGS"
 
-git fetch tmp_upstream --tags --quiet
+git fetch tmp_upstream --tags
 if [[ $? -ne 0 ]]; then
   echo "❌ Failed to fetch tags from tmp_upstream"
   exit 1
