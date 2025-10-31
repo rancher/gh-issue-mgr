@@ -113,12 +113,22 @@ sync_branch() {
     git branch -D "tmp_sync_$SOURCE_BRANCH" 2>/dev/null || true
 
     # Push changes to origin with force-with-lease for safety
-    git push origin "$DEST_BRANCH" --force-with-lease
+    if git push origin "$DEST_BRANCH" --force-with-lease; then
+      echo "✓ Push successful for $DEST_BRANCH"
+    else
+      echo "❌ Push failed for $DEST_BRANCH - check branch protections or token permissions"
+      return 1
+    fi
     echo "✓ Successfully synced $DEST_BRANCH with rebase"
   else
     # Branch does not exist -> use direct push method
     echo "Branch $DEST_BRANCH does not exist, pushing directly from tmp_upstream"
-    git push origin "refs/remotes/tmp_upstream/$SOURCE_BRANCH:refs/heads/$DEST_BRANCH" --force
+    if git push origin "refs/remotes/tmp_upstream/$SOURCE_BRANCH:refs/heads/$DEST_BRANCH" --force; then
+      echo "✓ Push successful for new $DEST_BRANCH"
+    else
+      echo "❌ Push failed for new $DEST_BRANCH"
+      return 1
+    fi
     echo "✓ Successfully created $DEST_BRANCH"
   fi
   
@@ -145,7 +155,8 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
     exit 0
   fi
   
-  echo "Found branches: $MATCHING_BRANCHES"
+  echo "Found branches:"
+  echo "$MATCHING_BRANCHES"
   
   # Track failures
   FAILED_BRANCHES=()
@@ -218,12 +229,18 @@ git fetch tmp_upstream --tags --quiet
 
 if [[ "$SYNC_TAGS" = true ]]; then
   echo "Force syncing all tags"
-  git push origin --tags --force
+  if git push origin --tags --force; then
+    echo "✓ Tags push successful"
+  else
+    echo "❌ Tags push failed"
+    exit 1
+  fi
 elif [[ -n "$SYNC_TAGS" ]]; then
   echo "Force syncing tags matching pattern: $SYNC_TAGS"
   MATCHING_TAGS=$(git tag | grep "$SYNC_TAGS" || true)
   if [[ -n "$MATCHING_TAGS" ]]; then
     echo "$MATCHING_TAGS" | xargs -r git push origin --force
+    echo "✓ Matching tags pushed"
   else
     echo "No tags matching pattern: $SYNC_TAGS"
   fi
