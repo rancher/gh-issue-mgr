@@ -227,11 +227,18 @@ fi
 # ----------------------------
 echo "Syncing tags if specified: SYNC_TAGS=$SYNC_TAGS"
 
-git fetch tmp_upstream --tags
-if [[ $? -ne 0 ]]; then
-  echo "❌ Failed to fetch tags from tmp_upstream"
-  exit 1
-fi
+REMOTE_TAGS=$(git ls-remote --tags tmp_upstream | awk '{print $2}' | sed 's#refs/tags/##')
+for tag in $REMOTE_TAGS; do
+  if ! git rev-parse "$tag" >/dev/null 2>&1; then
+    git fetch tmp_upstream tag "$tag" || {
+      echo "❌ Failed to fetch tag $tag"
+      exit 1
+    }
+    echo "✓ Fetched tag $tag"
+  else
+    echo "→ Skipped existing tag $tag"
+  fi
+done
 
 if [[ "$SYNC_TAGS" == "true" ]]; then
   echo "Force syncing all tags"
