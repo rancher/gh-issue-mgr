@@ -200,8 +200,8 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
   echo "========================================"
   echo "Wildcard Sync Summary"
   echo "========================================"
-  echo "✓ Successfully synced: $SUCCESS_COUNT branches"
-  
+  echo "✓ Successfully synced $SUCCESS_COUNT branches"
+
   if [[ ${#FAILED_BRANCHES[@]} -gt 0 ]]; then
     echo "❌ Failed to sync: ${#FAILED_BRANCHES[@]} branches"
     for branch in "${FAILED_BRANCHES[@]}"; do
@@ -225,7 +225,13 @@ fi
 # ----------------------------
 # Optional tag sync
 # ----------------------------
+echo "Syncing tags if specified: SYNC_TAGS=$SYNC_TAGS"
+
 git fetch tmp_upstream --tags --quiet
+if [[ $? -ne 0 ]]; then
+  echo "❌ Failed to fetch tags from tmp_upstream"
+  exit 1
+fi
 
 if [[ "$SYNC_TAGS" = true ]]; then
   echo "Force syncing all tags"
