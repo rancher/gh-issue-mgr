@@ -1,8 +1,16 @@
 #!/bin/bash
 set -e
 
+# ----------------------------
+# 1. Configure Git Environment & Identity
+# ----------------------------
 # Fix Git safe directory issue
 git config --global --add safe.directory /github/workspace
+
+# Fix "Committer identity unknown" error
+echo "Configuring Git Identity..."
+git config --global user.name "github-actions[bot]"
+git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
 UPSTREAM_REPO=$1
 BRANCH_PATTERN=$2
@@ -90,9 +98,10 @@ sync_branch() {
     # Fetch source branch from upstream
     git fetch tmp_upstream "$SOURCE_BRANCH:tmp_sync_$SOURCE_BRANCH" --quiet
     
-    # Rebase on tmp_sync_SOURCE_BRANCH with error handling
-    if ! git rebase "tmp_sync_$SOURCE_BRANCH"; then
-      echo "❌ Rebase failed for $DEST_BRANCH with conflicts"
+    # Rebase on tmp_sync_SOURCE_BRANCH with conflict resolution (-Xtheirs)
+    # -Xtheirs forces git to favor the incoming (upstream) changes if a conflict occurs
+    if ! git rebase -Xtheirs "tmp_sync_$SOURCE_BRANCH"; then
+      echo "❌ Rebase failed for $DEST_BRANCH despite auto-resolution"
       echo "Conflict details:"
       git status --short || echo "No status available"
       echo ""
