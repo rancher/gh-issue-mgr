@@ -12,6 +12,10 @@ echo "Configuring Git Identity..."
 git config --global user.name "github-actions[bot]"
 git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+# Enable the built-in "ours" merge driver so paths marked `merge=ours`
+# in .gitattributes keep the local version during merges/rebases.
+git config --global merge.ours.driver true
+
 UPSTREAM_REPO=$1
 BRANCH_PATTERN=$2
 
