@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v1
+        uses: docker/build-push-action@v7
         with:
           username: ${{ github.actor }}
           password: ${{ secrets.CR_PAT }}
