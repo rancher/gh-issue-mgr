@@ -6,7 +6,7 @@ on:
 
 jobs:
   actions-tagger:
-    runs-on: windows-2022
+    runs-on: windows-2025
     permissions:
       contents: write
     steps:
