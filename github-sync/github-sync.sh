@@ -259,6 +259,19 @@ if [[ "$BRANCH_PATTERN" == *"*"* ]]; then
   # Get list of remote branches matching the pattern
   # Convert shell wildcard to regex (e.g., v* -> v.*)
   MATCHING_BRANCHES=$(git ls-remote --heads tmp_upstream | awk '{print $2}' | sed 's|refs/heads/||' | grep "^${SOURCE_PATTERN//\*/.*}$" || true)
+
+  # Optionally restrict to an explicit list of source branches (comma or newline separated)
+  SYNC_BRANCHES_LIST=$(printf '%s' "$SYNC_BRANCHES" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' || true)
+  if [[ -n "$SYNC_BRANCHES_LIST" ]]; then
+    echo "Restricting sync to branches:"
+    echo "$SYNC_BRANCHES_LIST"
+    while IFS= read -r BRANCH; do
+      if ! grep -Fxq -- "$BRANCH" <<< "$MATCHING_BRANCHES"; then
+        echo "⚠️  $BRANCH not found in upstream or does not match pattern $SOURCE_PATTERN"
+      fi
+    done <<< "$SYNC_BRANCHES_LIST"
+    MATCHING_BRANCHES=$(grep -Fx -f <(echo "$SYNC_BRANCHES_LIST") <<< "$MATCHING_BRANCHES" || true)
+  fi
   
   if [[ -z "$MATCHING_BRANCHES" ]]; then
     echo "No branches matching pattern: $SOURCE_PATTERN"
