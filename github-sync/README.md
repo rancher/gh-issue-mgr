@@ -41,8 +41,10 @@ jobs:
         source_branch: ""
         destination_branch: ""
         sync_tags: ""
+        skip_rebase_files: ""
         github_token: ${{ secrets.PAT }}
 ```
+`skip_rebase_files` accepts files or directories (comma or newline separated). When an existing destination branch is rebased, these paths keep their destination-branch content, e.g. `.github/workflows/repo-sync.yml,README.md`.
 If `source_repo` is private or with another provider, either (1) use an authenticated HTTPS repo clone url like `https://${access_token}@github.com/owner/repository.git` or (2) set a `SSH_PRIVATE_KEY` secret environment variable and use the SSH clone url
 
 ### Workflow overwriting

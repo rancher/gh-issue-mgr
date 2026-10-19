@@ -20,12 +20,16 @@ inputs:
   sync_tags:
     description: Should tags also be synced
     required: false
+  skip_rebase_files:
+    description: Files or directories (comma or newline separated) to keep as-is on the destination branch when rebasing
+    required: false
 runs:
   using: 'docker'
   image: docker://ghcr.io/rancher/github-sync:latest
   env:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     SYNC_TAGS: ${{ inputs.sync_tags }}
+    SKIP_REBASE_FILES: ${{ inputs.skip_rebase_files }}
   args:
     - ${{ inputs.source_repo }}
     - ${{ inputs.source_branch }}:${{ inputs.destination_branch }}

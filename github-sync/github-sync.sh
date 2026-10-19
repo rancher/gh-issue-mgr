@@ -40,6 +40,23 @@ fi
 echo "UPSTREAM_REPO=$UPSTREAM_REPO"
 echo "BRANCH_PATTERN=$BRANCH_PATTERN"
 
+# ----------------------------
+# Files to keep as-is on the destination branch (comma or newline separated)
+# ----------------------------
+SKIP_REBASE_FILES_LIST=$(printf '%s' "$SKIP_REBASE_FILES" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s#^\./##;s#^/##' | grep -v '^$' || true)
+
+if [[ -n "$SKIP_REBASE_FILES_LIST" ]]; then
+  echo "Files skipped from rebase:"
+  echo "$SKIP_REBASE_FILES_LIST"
+
+  # Auto-resolve conflicts on these paths during rebase; they are restored afterwards anyway.
+  mkdir -p .git/info
+  while IFS= read -r FILE; do
+    echo "$FILE merge=ours" >> .git/info/attributes
+    echo "$FILE/** merge=ours" >> .git/info/attributes
+  done <<< "$SKIP_REBASE_FILES_LIST"
+fi
+
 git config --unset-all http."https://github.com/".extraheader || :
 
 # ----------------------------
@@ -59,6 +76,30 @@ echo "Adding tmp_upstream $UPSTREAM_REPO"
 git remote add tmp_upstream "$UPSTREAM_REPO"
 git fetch tmp_upstream --quiet
 git remote --verbose
+
+# ----------------------------
+# Restore skipped files to their pre-rebase state on the destination branch
+# ----------------------------
+restore_skipped_files() {
+  local DEST_BRANCH=$1
+
+  [[ -z "$SKIP_REBASE_FILES_LIST" ]] && return 0
+
+  echo "Restoring skipped files from origin/$DEST_BRANCH"
+  while IFS= read -r FILE; do
+    git rm -r -q --ignore-unmatch -- "$FILE" || return 1
+    if git cat-file -e "origin/$DEST_BRANCH:$FILE" 2>/dev/null; then
+      git checkout "origin/$DEST_BRANCH" -- "$FILE" || return 1
+    fi
+  done <<< "$SKIP_REBASE_FILES_LIST"
+
+  if git diff --cached --quiet; then
+    echo "Skipped files unchanged"
+  else
+    git commit -q -m "Keep skipped files from $DEST_BRANCH" -m "$SKIP_REBASE_FILES_LIST" || return 1
+    echo "✓ Committed restored skipped files"
+  fi
+}
 
 # ----------------------------
 # Function to sync a single branch with rebase support
@@ -124,6 +165,12 @@ sync_branch() {
 
     # Clean up temp branch
     git branch -D "tmp_sync_$SOURCE_BRANCH" 2>/dev/null || true
+
+    if ! restore_skipped_files "$DEST_BRANCH"; then
+      echo "❌ Failed to restore skipped files for $DEST_BRANCH"
+      git checkout --detach HEAD 2>/dev/null || true
+      return 1
+    fi
 
     # Push changes to origin with force-with-lease for safety
     if git push origin "$DEST_BRANCH" --force-with-lease; then
