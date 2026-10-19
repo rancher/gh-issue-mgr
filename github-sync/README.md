@@ -42,9 +42,12 @@ jobs:
         destination_branch: ""
         sync_tags: ""
         skip_rebase_files: ""
+        sync_branches: ""
         github_token: ${{ secrets.PAT }}
 ```
 `skip_rebase_files` accepts files or directories (comma or newline separated). When an existing destination branch is rebased, these paths keep their destination-branch content, e.g. `.github/workflows/repo-sync.yml,README.md`.
+
+`sync_branches` restricts a wildcard `source_branch` (e.g. `v*.*.x`) to the listed source branches (comma or newline separated), e.g. `v1.13.x,v1.12.x,v1.11.x`. All matching branches are synced if empty.
 If `source_repo` is private or with another provider, either (1) use an authenticated HTTPS repo clone url like `https://${access_token}@github.com/owner/repository.git` or (2) set a `SSH_PRIVATE_KEY` secret environment variable and use the SSH clone url
 
 ### Workflow overwriting
