@@ -101,6 +101,57 @@ restore_skipped_files() {
   fi
 }
 
+is_skipped_file() {
+  local FILE=$1 SKIP
+  while IFS= read -r SKIP; do
+    [[ -z "$SKIP" ]] && continue
+    if [[ "$FILE" == "$SKIP" || "$FILE" == "$SKIP/"* ]]; then
+      return 0
+    fi
+  done <<< "$SKIP_REBASE_FILES_LIST"
+  return 1
+}
+
+# ----------------------------
+# Rebase, auto-resolving conflicts (incl. modify/delete) that only touch skipped files
+# ----------------------------
+rebase_with_skipped_files() {
+  local ONTO=$1 CONFLICTS FILE
+
+  git rebase -Xtheirs "$ONTO" && return 0
+  [[ -z "$SKIP_REBASE_FILES_LIST" ]] && return 1
+
+  while [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; do
+    CONFLICTS=$(git diff --name-only --diff-filter=U)
+    [[ -z "$CONFLICTS" ]] && return 1
+
+    while IFS= read -r FILE; do
+      if ! is_skipped_file "$FILE"; then
+        echo "Conflict on non-skipped file: $FILE"
+        return 1
+      fi
+    done <<< "$CONFLICTS"
+
+    # Any resolution works here: skipped files are restored after the rebase.
+    while IFS= read -r FILE; do
+      echo "Auto-resolving conflict on skipped file: $FILE"
+      if [[ -e "$FILE" ]]; then
+        git add -- "$FILE" || return 1
+      else
+        git rm -q -- "$FILE" || return 1
+      fi
+    done <<< "$CONFLICTS"
+
+    if git diff --cached --quiet; then
+      git rebase --skip && return 0
+    else
+      GIT_EDITOR=true git rebase --continue && return 0
+    fi
+  done
+
+  return 1
+}
+
 # ----------------------------
 # Function to sync a single branch with rebase support
 # ----------------------------
@@ -145,7 +196,7 @@ sync_branch() {
     
     # Rebase on tmp_sync_SOURCE_BRANCH with conflict resolution (-Xtheirs)
     # -Xtheirs forces git to favor the incoming (upstream) changes if a conflict occurs
-    if ! git rebase -Xtheirs "tmp_sync_$SOURCE_BRANCH"; then
+    if ! rebase_with_skipped_files "tmp_sync_$SOURCE_BRANCH"; then
       echo "❌ Rebase failed for $DEST_BRANCH despite auto-resolution"
       echo "Conflict details:"
       git status --short || echo "No status available"
